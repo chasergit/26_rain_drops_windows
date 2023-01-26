@@ -119,7 +119,8 @@ uniform sampler2D sky;
 varying float drops_offset;
 
 
-int drops_amount=1; // йнкхвеярбн йюоекэ б ндмнл яейрнпе. ме анкэье 50, хмюве анкэьюъ мюцпсгйю
+int drops_amount=3; // йнкхвеярбн йюоекэ б ндмнл яейрнпе. ме анкэье 50, хмюве анкэьюъ мюцпсгйю
+float drops_gravity=0.02; // цпюбхрюжхъ
 float drops_merge=0.3; // йсвмнярэ хкх яйнпнярэ сбъдюмхъ йюоекэ нр 0 дн 1
 float drops_radius=0.2; // пюглеп йюокх
 float drops_cell=30.0; // пюглеп яейрнпю
@@ -142,12 +143,12 @@ return fract(sin(dot(inputValue,vec2(123.456,43.12)))*seed);
 
 
 // йюокх
-vec3 Drops(vec2 uv,float seed){
+vec3 Drops(vec2 uv,float seed,float drops_amount_f){
 
 
 // яксвюимюъ онгхжхъ
 float shiftY=random_1(0.5,seed);
-uv.y+=shiftY;
+uv.y+=(seed+1.0)*drops_gravity*time;
 
 
 // пюгдекъел UV мю яейрнпю, б йюфднл яейрнпе йюокъ
@@ -180,7 +181,7 @@ dropIntensity=clamp(dropIntensity,0.0,1.0);
 
 
 // йюокх рнкэйн бмсрпх рейярспш, ю ме гю опедекюлх
-float isInsideDrop=1.0-step(drops_radius,distanceFromCenter);
+float isInsideDrop=1.0-step(drops_radius*(1.0/drops_amount_f+seed/drops_amount_f),distanceFromCenter);
 
 
 vec2 vecToCenter=normalize(cellCenter-cellUv);
@@ -201,9 +202,10 @@ return drop;
 
 shader.fragmentShader=shader.fragmentShader.replace("#include <map_fragment>",
 `vec2 uv=vUv;
+float drops_amount_f=float(drops_amount);
 vec3 drops=vec3(0.0);
 for(int i=0;i<drops_amount;i++){
-drops+=Drops(uv+drops_offset,42424.43+float(i)*12313.432);
+drops+=Drops(uv+drops_offset,float(i),drops_amount_f);
 drops.xy/=drops_texture_scale;
 }
 
