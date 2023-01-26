@@ -1,0 +1,262 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+</head>
+<body style="margin:0px;overflow:hidden;">
+
+
+<div id="stat" style="position:absolute;"></div>
+<canvas id="canvas" width="800" height="600" style="display:block;"></canvas>
+
+
+<script type="text/javascript" src="js/three_140.js"></script>
+<script type="text/javascript" src="js/stats.min.js"></script>
+<script type="text/javascript" src="js/FirstPersonControls.js"></script>
+
+
+<script type="text/javascript">
+
+
+"use strict";
+
+
+var scene, camera, renderer, controls;
+var canvas=document.getElementById("canvas");
+var width=screen.width;
+var height=screen.height;
+canvas.width=screen.width;
+canvas.height=screen.height;
+var mesh=[];
+var mat=[];
+var clock=new THREE.Clock();
+
+
+var stats=new Stats();
+document.getElementById("stat").appendChild(stats.dom);
+
+
+camera=new THREE.PerspectiveCamera(60,width/height,0.05,1000);
+camera.position.set(0,0,2);
+
+
+var controls=new THREE.FirstPersonControls(camera,canvas);
+controls.movementSpeed=2;
+controls.lookSpeed=0.1;
+controls.lookVertical=true;
+controls.lon=-1.5*180/Math.PI;
+
+
+renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true,transparent:true,premultipliedAlpha:false});
+renderer.setSize(width,height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x000000);
+
+
+scene=new THREE.Scene();
+
+
+//____________________ рейярспш ____________________
+
+
+var maxanisotropy=renderer.capabilities.getMaxAnisotropy(); // верйнярэ хгнапюфемхъ
+
+
+var tex=[];
+var texture_loader=new THREE.TextureLoader();
+
+
+tex["window"]=texture_loader.load("textures/window.jpg");
+tex["sky"]=texture_loader.load("textures/sky.jpg");
+
+
+//____________________ меан ____________________
+
+
+var textureSkyCube=new THREE.CubeTextureLoader().setPath("textures/sky/").load(["lf.jpg","rt.jpg","up.jpg","dn.jpg","ft.jpg","bk.jpg"]);
+scene.background=textureSkyCube;
+
+
+var ambient=new THREE.AmbientLight(0x000000,0.3);
+scene.add(ambient);
+
+
+var sun=new THREE.DirectionalLight(0xfffff0,2.0);
+sun.position.set(40,50,40);
+scene.add(sun);
+
+
+mat["window"]=new THREE.MeshStandardMaterial({
+map:tex["window"],
+roughness:0.5,
+transparent:true,
+side:THREE.DoubleSide
+})
+
+
+mat["window"].userData.shader={};
+mat["window"].userData.shader.uniforms={};
+mat["window"].userData.shader.uniforms.time={value:0};
+mat["window"].userData.shader.uniforms.sky={value:tex["sky"]};
+
+
+mat["window"].onBeforeCompile=(shader)=>{
+
+
+shader.uniforms.time={value:0};
+shader.uniforms.sky={value:tex["sky"]};
+
+shader.vertexShader=shader.vertexShader.replace("void main() {",
+`
+varying float drops_offset;
+void main() {
+drops_offset=(modelMatrix[3].x+modelMatrix[3].y+modelMatrix[3].z)*10.0;
+`);
+
+
+shader.fragmentShader=`
+uniform float time;
+uniform sampler2D sky;
+varying float drops_offset;
+
+
+int drops_amount=1; // йнкхвеярбн йюоекэ б ндмнл яейрнпе. ме анкэье 50, хмюве анкэьюъ мюцпсгйю
+float drops_merge=0.3; // йсвмнярэ хкх яйнпнярэ сбъдюмхъ йюоекэ нр 0 дн 1
+float drops_radius=0.2; // пюглеп йюокх
+float drops_cell=30.0; // пюглеп яейрнпю
+float drops_texture_scale=1.0; // люяьрюа рейярспш йюокх
+float drops_brightness=0.9; // ъпйнярэ йюокх
+float drops_opacity=0.99; // опнгпювмнярэ йюокх
+float surface_opacity=0.5; // опнгпювмнярэ онбепумнярх
+
+
+// яксвюимне вхякн 1
+float random_1(float inputValue,float seed){
+return fract(sin(inputValue*345.456)*seed);
+}
+
+
+// яксвюимне вхякн 2
+float random_2(vec2 inputValue,float seed){
+return fract(sin(dot(inputValue,vec2(123.456,43.12)))*seed);
+}
+
+
+// йюокх
+vec3 Drops(vec2 uv,float seed){
+
+
+// яксвюимюъ онгхжхъ
+float shiftY=random_1(0.5,seed);
+uv.y+=shiftY;
+
+
+// пюгдекъел UV мю яейрнпю, б йюфднл яейрнпе йюокъ
+float cellsResolution=drops_cell;
+uv*=cellsResolution;
+
+
+// яксвюимне ялеыемхе яейрнпнб, врнаш ме ашкн гюлермн врн йюокх онъбкъчряъ б ндмнл х рнл фе йюбюдпюре
+float rowIndex=floor(uv.y);
+float shiftX=random_1(rowIndex,seed);
+uv.x+=shiftX;
+
+
+vec2 cellIndex=floor(uv);
+vec2 cellUv=fract(uv);
+
+
+vec2 cellCenter=vec2(0.5);
+float distanceFromCenter=distance(cellUv,cellCenter);
+
+
+// сдюкемхе сярюпебьху йюоекэ
+float isDropShown=step(drops_merge,random_2(cellIndex,seed+14244.324));
+
+
+// сбъдюмхе йюоекэ
+float dropIntensity=1.0-fract(time*0.1+random_2(cellIndex,seed+32132.432)*2.0)*2.0;
+dropIntensity=sign(dropIntensity)*abs(dropIntensity*dropIntensity*dropIntensity*dropIntensity);
+dropIntensity=clamp(dropIntensity,0.0,1.0);
+
+
+// йюокх рнкэйн бмсрпх рейярспш, ю ме гю опедекюлх
+float isInsideDrop=1.0-step(drops_radius,distanceFromCenter);
+
+
+vec2 vecToCenter=normalize(cellCenter-cellUv);
+
+
+// йюокъ щрн бейрнп й жемрпс я сбекхвемхел дхярюмжхх нр мецн.
+vec2 dropValue=vecToCenter*distanceFromCenter*distanceFromCenter*40.0;
+
+
+float idd=isInsideDrop*isDropShown*dropIntensity;
+
+
+vec3 drop=vec3(dropValue*idd,idd);
+return drop;
+}
+`+shader.fragmentShader;
+
+
+shader.fragmentShader=shader.fragmentShader.replace("#include <map_fragment>",
+`vec2 uv=vUv;
+vec3 drops=vec3(0.0);
+for(int i=0;i<drops_amount;i++){
+drops+=Drops(uv+drops_offset,42424.43+float(i)*12313.432);
+drops.xy/=drops_texture_scale;
+}
+
+
+
+uv+=drops.xy;
+
+
+vec4 drops_diffuse=vec4(texture2D(sky,uv).rgb*drops_brightness,drops_opacity);
+vec4 surface_diffuse=vec4(texture2D(map,vUv).rgb,surface_opacity);
+diffuseColor=mix(surface_diffuse,drops_diffuse,clamp(drops.z,0.0,1.0));
+
+
+`
+);
+
+
+mat["window"].userData.shader=shader;
+};
+
+
+mat["window"].customProgramCacheKey=function(){
+return 1;
+};
+
+
+mesh["window_1"]=new THREE.Mesh(new THREE.PlaneBufferGeometry(2,2),mat["window"]);
+scene.add(mesh["window_1"]);
+mesh["window_2"]=new THREE.Mesh(new THREE.PlaneBufferGeometry(2,2),mat["window"]);
+mesh["window_2"].position.set(2.2,0,0);
+scene.add(mesh["window_2"]);
+
+
+// ____________________ пемдепхмц ____________________
+
+
+function loop(){
+
+
+requestAnimationFrame(loop);
+stats.update();
+var delta=clock.getDelta();
+controls.update(delta);
+mat["window"].userData.shader.uniforms.time.value=performance.now()/2000;
+renderer.render(scene,camera);
+
+
+}
+
+
+loop();
+
+
+</script>
+</body>
+</html>
