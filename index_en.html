@@ -119,7 +119,8 @@ uniform sampler2D sky;
 varying float drops_offset;
 
 
-int drops_amount=1; // NUMBER OF DROPS IN ONE SECTOR. NO MORE THAN 50, OTHERWISE A HIGH LOAD
+int drops_amount=3; // NUMBER OF DROPS IN ONE SECTOR. NO MORE THAN 50, OTHERWISE A HIGH LOAD
+float drops_gravity=0.02; // GRAVITY
 float drops_merge=0.3; // DROP PATTERN OR WITHER RATE FROM 0 TO 1
 float drops_radius=0.2; // DROP SIZE
 float drops_cell=30.0; // SECTOR SIZE
@@ -142,12 +143,12 @@ return fract(sin(dot(inputValue,vec2(123.456,43.12)))*seed);
 
 
 // DROPS
-vec3 Drops(vec2 uv,float seed){
+vec3 Drops(vec2 uv,float seed,float drops_amount_f){
 
 
 // RANDOM POSITION
 float shiftY=random_1(0.5,seed);
-uv.y+=shiftY;
+uv.y+=(seed+1.0)*drops_gravity*time;
 
 
 // DIVIDE UV INTO SECTORS, IN EACH SECTOR A DROP
@@ -180,7 +181,7 @@ dropIntensity=clamp(dropIntensity,0.0,1.0);
 
 
 // DROPS ONLY INSIDE THE TEXTURE, NOT OUTSIDE
-float isInsideDrop=1.0-step(drops_radius,distanceFromCenter);
+float isInsideDrop=1.0-step(drops_radius*(1.0/drops_amount_f+seed/drops_amount_f),distanceFromCenter);
 
 
 vec2 vecToCenter=normalize(cellCenter-cellUv);
@@ -201,9 +202,10 @@ return drop;
 
 shader.fragmentShader=shader.fragmentShader.replace("#include <map_fragment>",
 `vec2 uv=vUv;
+float drops_amount_f=float(drops_amount);
 vec3 drops=vec3(0.0);
 for(int i=0;i<drops_amount;i++){
-drops+=Drops(uv+drops_offset,42424.43+float(i)*12313.432);
+drops+=Drops(uv+drops_offset,float(i),drops_amount_f);
 drops.xy/=drops_texture_scale;
 }
 
@@ -235,6 +237,9 @@ scene.add(mesh["window_1"]);
 mesh["window_2"]=new THREE.Mesh(new THREE.PlaneBufferGeometry(2,2),mat["window"]);
 mesh["window_2"].position.set(2.2,0,0);
 scene.add(mesh["window_2"]);
+
+
+// ____________________ RENDERING ____________________
 
 
 function loop(){
